@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_MINUTES: int = 10080
 
     # MySQL
+    MYSQL_PUBLIC_URL: str | None = None
     MYSQL_USER: str = "root"
     MYSQL_PASSWORD: str = "root"
     MYSQL_DB: str = "medassist_db"
@@ -48,7 +49,15 @@ class Settings(BaseSettings):
 
     @property
     def DATABASE_URL(self) -> str:
-        # URL encode the password in case it contains special characters
+        if self.MYSQL_PUBLIC_URL:
+            url = self.MYSQL_PUBLIC_URL
+            if url.startswith("mysql://"):
+                url = url.replace("mysql://", "mysql+aiomysql://", 1)
+            elif url.startswith("mysql+pymysql://"):
+                url = url.replace("mysql+pymysql://", "mysql+aiomysql://", 1)
+            return url
+
+        # Fallback to individual components (local testing usually)
         password = urllib.parse.quote_plus(self.MYSQL_PASSWORD)
         return (
             f"mysql+aiomysql://{self.MYSQL_USER}:{password}"
