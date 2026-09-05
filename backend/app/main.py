@@ -78,7 +78,7 @@ app.add_middleware(StripPrefixMiddleware, prefix="/api/backend")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=settings.parsed_cors_origins,
     allow_credentials=True,
     allow_methods=[
         "GET",
@@ -120,14 +120,30 @@ async def root():
     }
 
 
+from sqlalchemy import text
+from fastapi import Response
+
 @app.get("/health", tags=["Health"])
-async def health_check():
+async def health_check(response: Response):
     """
-    Health check endpoint to ensure backend is running.
-    (Vercel expects a JSON response returning status healthy)
+    Health check endpoint to ensure backend and DB are running.
     """
+    from app.core.database import AsyncSessionLocal
+    
+    db_status = "healthy"
+    status_code = 200
+    
+    try:
+        async with AsyncSessionLocal() as session:
+            await session.execute(text("SELECT 1"))
+    except Exception as e:
+        db_status = f"unhealthy: {str(e)}"
+        status_code = 503
+        
+    response.status_code = status_code
     return {
-        "status": "healthy",
+        "status": "healthy" if status_code == 200 else "unhealthy",
+        "database": db_status,
         "source": "fastapi",
-        "message": "MedAssist AI backend is running"
+        "message": "MedAssist AI backend health check"
     }

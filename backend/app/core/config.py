@@ -1,7 +1,10 @@
+import json
+import urllib.parse
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    
     # App
     APP_NAME: str = "MedAssist AI"
     ENV: str = "development"
@@ -25,8 +28,8 @@ class Settings(BaseSettings):
     MONGO_URI: str = "mongodb://localhost:27017"
     MONGO_DB_NAME: str = "medassist_logs"
 
-    # CORS — allow both port 3000 and 3001 (Next.js dev server may use either)
-    CORS_ORIGINS: list[str] = [
+    # CORS
+    CORS_ORIGINS: str | list[str] = [
         "http://localhost:3000",
         "http://localhost:3001",
         "http://127.0.0.1:3000",
@@ -35,15 +38,27 @@ class Settings(BaseSettings):
     ]
 
     @property
+    def parsed_cors_origins(self) -> list[str]:
+        if isinstance(self.CORS_ORIGINS, str):
+            try:
+                return json.loads(self.CORS_ORIGINS)
+            except ValueError:
+                return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
+        return self.CORS_ORIGINS
+
+    @property
     def DATABASE_URL(self) -> str:
+        # URL encode the password in case it contains special characters
+        password = urllib.parse.quote_plus(self.MYSQL_PASSWORD)
         return (
-            f"mysql+aiomysql://{self.MYSQL_USER}:{self.MYSQL_PASSWORD}"
+            f"mysql+aiomysql://{self.MYSQL_USER}:{password}"
             f"@{self.MYSQL_HOST}:{self.MYSQL_PORT}/{self.MYSQL_DB}"
         )
 
     model_config = SettingsConfigDict(
         env_file=".env",
-        extra="ignore"
+        extra="ignore",
+        env_file_encoding="utf-8"
     )
 
 
