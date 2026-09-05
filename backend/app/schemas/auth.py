@@ -9,7 +9,7 @@ from app.models.user import UserRole
 
 class UserRegister(BaseModel):
     email: EmailStr
-    password: str = Field(min_length=8, max_length=128)
+    password: str = Field(min_length=8, max_length=72)
     full_name: str = Field(min_length=2, max_length=255)
     role: UserRole = UserRole.PATIENT
     phone_number: str | None = None
@@ -34,6 +34,8 @@ class UserRegister(BaseModel):
     def validate_password(cls, v: str) -> str:
         if not re.match(r"^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d@$!%*#?&]{8,}$", v):
             raise ValueError('Password must contain at least one letter and one number')
+        if len(v.encode("utf-8")) > 72:
+            raise ValueError('Password byte length cannot exceed 72 bytes due to bcrypt limitation')
         return v
 
     @field_validator('phone_number')
