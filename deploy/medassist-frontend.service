@@ -1,0 +1,15 @@
+[Unit]
+Description=MedAssist AI Next.js Frontend Service
+After=network.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/medassist-ai/frontend
+ExecStart=/usr/bin/npm run start
+Restart=always
+Environment=NODE_ENV=production
+Environment=PORT=3000
+Environment=NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+
+[Install]
+WantedBy=multi-user.target

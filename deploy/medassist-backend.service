@@ -1,0 +1,19 @@
+[Unit]
+Description=MedAssist AI FastAPI Backend Service
+After=network.target mysql.service
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/medassist-ai/backend
+ExecStart=/home/ubuntu/medassist-ai/backend/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 4
+Restart=always
+Environment=ENV=production
+Environment=MYSQL_USER=medassist_user
+Environment=MYSQL_PASSWORD=secure_password
+Environment=MYSQL_DB=medassist_db
+Environment=MYSQL_HOST=localhost
+Environment=MYSQL_PORT=3306
+Environment=JWT_SECRET_KEY=ROTATE_THIS_SECRET_KEY_FOR_SECURITY
+
+[Install]
+WantedBy=multi-user.target
