@@ -1,10 +1,9 @@
 import json
-import urllib.parse
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class Settings(BaseSettings):
-    
+class Settings:
+
     # App
     APP_NAME: str = "MedAssist AI"
     ENV: str = "development"
@@ -44,25 +43,39 @@ class Settings(BaseSettings):
             try:
                 return json.loads(self.CORS_ORIGINS)
             except ValueError:
-                return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
+                return [
+                    origin.strip()
+                    for origin in self.CORS_ORIGINS.split(",")
+                    if origin.strip()
+                ]
+
         return self.CORS_ORIGINS
 
     @property
     def DATABASE_URL(self) -> str:
-        if self.MYSQL_PUBLIC_URL:
-            url = self.MYSQL_PUBLIC_URL
-            if url.startswith("mysql://"):
-                url = url.replace("mysql://", "mysql+aiomysql://", 1)
-            elif url.startswith("mysql+pymysql://"):
-                url = url.replace("mysql+pymysql://", "mysql+aiomysql://", 1)
-            return url
+        if not self.MYSQL_PUBLIC_URL:
+            raise RuntimeError(
+                "MYSQL_PUBLIC_URL is missing. "
+                "Please configure MYSQL_PUBLIC_URL in Railway Variables."
+            )
 
-        # Fallback to individual components (local testing usually)
-        password = urllib.parse.quote_plus(self.MYSQL_PASSWORD)
-        return (
-            f"mysql+aiomysql://{self.MYSQL_USER}:{password}"
-            f"@{self.MYSQL_HOST}:{self.MYSQL_PORT}/{self.MYSQL_DB}"
-        )
+        url = self.MYSQL_PUBLIC_URL.strip()
+
+        if url.startswith("mysql://"):
+            url = url.replace(
+                "mysql://",
+                "mysql+aiomysql://",
+                1
+            )
+
+        elif url.startswith("mysql+pymysql://"):
+            url = url.replace(
+                "mysql+pymysql://",
+                "mysql+aiomysql://",
+                1
+            )
+
+        return url
 
     model_config = SettingsConfigDict(
         env_file=".env",
