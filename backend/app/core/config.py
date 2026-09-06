@@ -2,7 +2,7 @@ import json
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class Settings:
+class Settings(BaseSettings):
 
     # App
     APP_NAME: str = "MedAssist AI"
