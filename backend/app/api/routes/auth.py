@@ -31,107 +31,126 @@ from app.models.doctor import AdminProfile, DoctorProfile, HealthcareProviderPro
 @limiter.limit("5/minute")
 async def register(request: Request, payload: UserRegister, db: AsyncSession = Depends(get_db)):
     from app.models.diagnostics import AuditLog
+    import logging
+    logger = logging.getLogger(__name__)
 
-    existing = await db.execute(select(User).where(User.email == payload.email))
-    existing_user = existing.scalar_one_or_none()
-    
-    is_dev_update = False
-    if existing_user:
-        from app.core.config import settings
-        if settings.ENV == "development":
-            is_dev_update = True
-            existing_user.hashed_password = hash_password(payload.password)
-            existing_user.full_name = payload.full_name
-            existing_user.role = payload.role
-            existing_user.phone_number = payload.phone_number
-            db.add(existing_user)
-            await db.flush()
-            user = existing_user
-        else:
-            db.add(AuditLog(
-                action="REGISTER_FAILED_DUPLICATE",
-                resource_type="USER",
-                log_metadata={"email": payload.email}
-            ))
-            await db.commit()
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered.")
-    else:
-        user = User(
-            email=payload.email,
-            hashed_password=hash_password(payload.password),
-            full_name=payload.full_name,
-            role=payload.role,
-            phone_number=payload.phone_number,
-        )
-        db.add(user)
-        await db.flush()  # get user.id before commit
-    
-    db.add(AuditLog(
-        user_id=user.id,
-        action="REGISTER_SUCCESS_DEV_UPDATE" if is_dev_update else "REGISTER_SUCCESS",
-        resource_type="USER",
-        resource_id=user.id,
-        log_metadata={"email": user.email, "role": user.role.value}
-    ))
-
-    # Handle role-specific profiles
-    if is_dev_update:
-        # Clean up any existing profiles across roles so we can insert the new one
-        from sqlalchemy import delete
-        await db.execute(delete(PatientProfile).where(PatientProfile.user_id == user.id))
-        await db.execute(delete(DoctorProfile).where(DoctorProfile.user_id == user.id))
-        await db.execute(delete(HealthcareProviderProfile).where(HealthcareProviderProfile.user_id == user.id))
-        await db.execute(delete(AdminProfile).where(AdminProfile.user_id == user.id))
-        await db.flush()
-
-    if payload.role == UserRole.PATIENT:
-        dob = None
-        if payload.date_of_birth:
-            try:
-                dob = datetime.strptime(payload.date_of_birth, "%Y-%m-%d").date()
-            except ValueError:
-                pass
+    try:
+        existing = await db.execute(select(User).where(User.email == payload.email))
+        existing_user = existing.scalar_one_or_none()
         
-        # Gender conversion
-        from app.models.patient import GenderType
-        gender_enum = None
-        if payload.gender:
-            try:
-                gender_enum = GenderType(payload.gender.lower())
-            except ValueError:
-                pass
-
-        profile = PatientProfile(
+        is_dev_update = False
+        if existing_user:
+            from app.core.config import settings
+            if settings.ENV == "development":
+                is_dev_update = True
+                existing_user.hashed_password = hash_password(payload.password)
+                existing_user.full_name = payload.full_name
+                existing_user.role = payload.role
+                existing_user.phone_number = payload.phone_number
+                db.add(existing_user)
+                await db.flush()
+                user = existing_user
+            else:
+                db.add(AuditLog(
+                    action="REGISTER_FAILED_DUPLICATE",
+                    resource_type="USER",
+                    log_metadata={"email": payload.email}
+                ))
+                await db.commit()
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered.")
+        else:
+            user = User(
+                email=payload.email,
+                hashed_password=hash_password(payload.password),
+                full_name=payload.full_name,
+                role=payload.role,
+                phone_number=payload.phone_number,
+            )
+            db.add(user)
+            await db.flush()  # get user.id before commit
+        
+        db.add(AuditLog(
             user_id=user.id,
-            date_of_birth=dob,
-            gender=gender_enum,
-            blood_group=payload.blood_group,
-            address=payload.address,
-            emergency_contact_name=payload.emergency_contact_name,
-            emergency_contact_phone=payload.emergency_contact_phone
+            action="REGISTER_SUCCESS_DEV_UPDATE" if is_dev_update else "REGISTER_SUCCESS",
+            resource_type="USER",
+            resource_id=user.id,
+            log_metadata={"email": user.email, "role": user.role.value}
+        ))
+
+        # Handle role-specific profiles
+        if is_dev_update:
+            # Clean up any existing profiles across roles so we can insert the new one
+            from sqlalchemy import delete
+            await db.execute(delete(PatientProfile).where(PatientProfile.user_id == user.id))
+            await db.execute(delete(DoctorProfile).where(DoctorProfile.user_id == user.id))
+            await db.execute(delete(HealthcareProviderProfile).where(HealthcareProviderProfile.user_id == user.id))
+            await db.execute(delete(AdminProfile).where(AdminProfile.user_id == user.id))
+            await db.flush()
+
+        if payload.role == UserRole.PATIENT:
+            dob = None
+            if payload.date_of_birth:
+                try:
+                    dob = datetime.strptime(payload.date_of_birth, "%Y-%m-%d").date()
+                except ValueError:
+                    pass
+            
+            # Gender conversion
+            from app.models.patient import GenderType
+            gender_enum = None
+            if payload.gender:
+                try:
+                    gender_enum = GenderType(payload.gender.lower())
+                except ValueError:
+                    pass
+
+            profile = PatientProfile(
+                user_id=user.id,
+                date_of_birth=dob,
+                gender=gender_enum,
+                blood_group=payload.blood_group,
+                address=payload.address,
+                emergency_contact_name=payload.emergency_contact_name,
+                emergency_contact_phone=payload.emergency_contact_phone
+            )
+            db.add(profile)
+        elif payload.role == UserRole.DOCTOR:
+            db.add(DoctorProfile(
+                user_id=user.id,
+                specialty=payload.specialty,
+                clinic_address=payload.clinic_address
+            ))
+        elif payload.role == UserRole.CLINIC:
+            db.add(HealthcareProviderProfile(
+                user_id=user.id,
+                facility_name=payload.facility_name,
+                address=payload.address
+            ))
+        elif payload.role == UserRole.ADMIN:
+            db.add(AdminProfile(user_id=user.id))
+
+        await db.commit()
+        await db.refresh(user)
+        
+        out = UserOut.model_validate(user)
+        out.is_dev_update = is_dev_update
+        return out
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Registration failed: {str(e)}", exc_info=True)
+        error_str = str(e).lower()
+        if "connect to mysql server" in error_str or "operationalerror" in error_str:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, 
+                detail="Database connection failed. Please check the database configuration."
+            )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            detail="An internal server error occurred during registration."
         )
-        db.add(profile)
-    elif payload.role == UserRole.DOCTOR:
-        db.add(DoctorProfile(
-            user_id=user.id,
-            specialty=payload.specialty,
-            clinic_address=payload.clinic_address
-        ))
-    elif payload.role == UserRole.CLINIC:
-        db.add(HealthcareProviderProfile(
-            user_id=user.id,
-            facility_name=payload.facility_name,
-            address=payload.address
-        ))
-    elif payload.role == UserRole.ADMIN:
-        db.add(AdminProfile(user_id=user.id))
-
-    await db.commit()
-    await db.refresh(user)
-    
-    out = UserOut.model_validate(user)
-    out.is_dev_update = is_dev_update
-    return out
 
 
 @router.post("/forgot-password")
